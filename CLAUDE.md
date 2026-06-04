@@ -1,3 +1,38 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this project is
+
+A **JSON:API backend** ("tickets") built on Laravel 13. It is currently a fresh skeleton: the API surface, models, and authorization rules are mostly unbuilt — `App\JsonApi\V1\Server::allSchemas()` returns an empty list (`// @TODO`) and `routes/api.php` only exposes the default `/user` endpoint. New work means filling in this scaffolding, not modifying an existing feature set.
+
+## Architecture (the parts that span multiple files)
+
+**JSON:API layer** — Uses `laravel-json-api/laravel`, not hand-written controllers.
+- `config/jsonapi.php` registers servers; the `v1` server is `App\JsonApi\V1\Server` (base URI `/api/v1`).
+- Resource schemas are registered in `Server::allSchemas()` — every new API resource needs a Schema class added there.
+- Exceptions for `api/*` requests are rendered as JSON:API errors: wired in `bootstrap/app.php` via `ExceptionParser::renderer()`, with `JsonApiException` excluded from reporting. Don't add custom JSON error handling for the API; it goes through this renderer.
+- Generate JSON:API classes with the package's artisan commands (e.g. `vendor/bin/sail artisan jsonapi:schema`, `jsonapi:controller`) rather than `make:controller`.
+
+**Authentication** — Laravel Passport (OAuth2), guard `auth:api`.
+- Token lifetimes are set in `AppServiceProvider::boot()`: access tokens 15 days, refresh tokens 30 days, personal access tokens 6 months. Change them there, not inline.
+- `User` uses `HasApiTokens`, and **`HasUuids` — primary keys are UUIDs**, so any model with a relationship to users (and likely all domain models) should use UUID keys and matching migration column types.
+
+**Authorization** — `spatie/laravel-permission`; `User` has the `HasRoles` trait. Use roles/permissions for access control rather than ad-hoc checks.
+
+## Environment specifics
+
+- **Runs in Laravel Sail / Docker — prefix every PHP/Artisan/Composer/Node command with `vendor/bin/sail`** (see the Sail rules in the boost guidelines below).
+- PHP **8.5** in the container (`docker/8.5`), even though `composer.json` declares `^8.3`. Database is **MySQL 8.4** under Sail (the `.env.example` default of `sqlite` is overridden by the compose stack); the test connection uses the `testing` database.
+
+## Testing
+
+**Pest v4 is the canonical test framework** — write tests with `test()`/`it()` and `expect()`, not PHPUnit classes. Shared setup and traits live in `tests/Pest.php`, where `RefreshDatabase` is currently commented out (enable it there once tests touch the database).
+
+Run tests with `vendor/bin/sail artisan test` (filter with `--filter=name`).
+
+---
+
 <laravel-boost-guidelines>
 === foundation rules ===
 
@@ -17,7 +52,7 @@ This application is a Laravel application and its main Laravel ecosystems packag
 - laravel/pail (PAIL) - v1
 - laravel/pint (PINT) - v1
 - laravel/sail (SAIL) - v1
-- phpunit/phpunit (PHPUNIT) - v12
+- pestphp/pest (PEST) - v4 (canonical test framework, runs on phpunit/phpunit v12)
 
 ## Skills Activation
 
@@ -156,12 +191,13 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - If you have modified any PHP files, you must run `vendor/bin/sail bin pint --dirty --format agent` before finalizing changes to ensure your code matches the project's expected style.
 - Do not run `vendor/bin/sail bin pint --test --format agent`, simply run `vendor/bin/sail bin pint --format agent` to fix any formatting issues.
 
-=== phpunit/core rules ===
+=== pest/core rules ===
 
-# PHPUnit
+# Pest
 
-- This application uses PHPUnit for testing. All tests must be written as PHPUnit classes. Use `vendor/bin/sail artisan make:test --phpunit {name}` to create a new test.
-- If you see a test using "Pest", convert it to PHPUnit.
+- This application uses Pest v4 for testing (running on top of PHPUnit). All tests must be written as Pest tests using the `test()`/`it()` functions and `expect()` API. Use `vendor/bin/sail artisan make:test {name}` to create a new test (Pest is the default generator).
+- If you see a test written as a PHPUnit class, convert it to Pest.
+- Shared setup, traits (e.g. `RefreshDatabase`), and helpers belong in `tests/Pest.php`.
 - Every time a test has been updated, run that singular test.
 - When the tests relating to your feature are passing, ask the user if they would like to also run the entire test suite to make sure everything is still passing.
 - Tests should cover all happy paths, failure paths, and edge cases.
